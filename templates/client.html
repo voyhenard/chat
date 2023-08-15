@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>CHAT</title>
+  <link rel="stylesheet" type="text/css" href="{{ url_for('static', filename='style.css') }}"></head>
+<body>
+  <div class="chat-container" id="chat" style="display: none;">
+    <div class="chat-header">
+      <h2>Sala de Chat</h2>
+    </div>
+    <div class="chat-messages" id="messages">
+    </div>
+    <div class="chat-input">
+      <input type="text" id="messageInput" placeholder="Digite sua mensagem">
+      <button onclick="sendMessage()">Enviar</button>
+    </div>
+  </div>
+  <script>
+    var username = "";
+    while (!username) {
+      username = prompt("Digite seu nome de usuário:"); //aguarda entrada de um nome de usuário
+    }
+    const host = "{{ server_ip }}"; //define ip do servidor recebido pelo http
+    const socket = new WebSocket("ws://"+host+":8888"); //cria conexão websocket com o servidor
+
+    //chamadaao abrir conexão com o servidor
+    socket.onopen = function(event) {
+      console.log("Conexão estabelecida com o servidor");
+      socket.send(username); //envia nome de usuário ao servidor
+    };
+
+    //chamada ao receber mensagem do servidor
+    socket.onmessage = function(event) {
+      console.log("Nova mensagem");
+      var newMessage = JSON.parse(event.data);
+      //verifica o tipo de mensagem recebida
+      if (newMessage.type === "username_check") {
+        //caso seja do tipo username_check verifica está disponível, ou não
+        var message = newMessage.content;
+        if (message === "username already in use") {
+          //se não estiver disponível solicita novo nome ao usuário
+          username = "";
+          while (!username) {
+            username = prompt("Nome de usuário já em uso. Por favor tente outro:");
+          }
+          socket.send(username);
+        } else if(message === "ok") {
+          //se estiver disponível exibe sala de chat
+          document.getElementById("chat").style.display = "block";
+          document.getElementById("messageInput").focus();
+        }
+      } else if (newMessage.type === "server_notification") {
+        //caso seja do tipo server_notification exibe notioficação do servidor no chat
+        var message = newMessage.content;
+        document.getElementById("messages").innerHTML += '<div class="message" style="text-align: center;"><p>'+message+'</p></div>';
+      } else if (newMessage.type === "chat_message") {
+        //caso seja do tipo chat_message exibe mensagem no chat, apresentando de forma diferente caso seja enviada pelo usuário
+        var sender = newMessage.username;
+        var message = newMessage.content;
+        if (sender === username) {
+          document.getElementById("messages").innerHTML += '<div class="message" style="text-align: right;"><span class="sender">'+username+'</span><p>'+message+'</p></div>';
+        } else {
+          document.getElementById("messages").innerHTML += '<div class="message"><span class="sender">'+sender+'</span><p>'+message+'</p></div>';
+        }
+      }
+      var chatMessages = document.getElementById("messages");
+      chatMessages.scrollTop = chatMessages.scrollHeight; //garante que mensagens mais recentes sejam exibidas
+    };
+
+    //define enter para envio de mensagem
+    document.getElementById("messageInput").addEventListener("keydown", function(event) {
+      if (event.key === "Enter") {
+        sendMessage();
+        event.preventDefault(); //evita que faça uma quebra de linha
+      }
+    });
+
+    //envia mensagem ao servidor e limpa campo de entrada para nova mensagem
+    function sendMessage() {
+      const messageInput = document.getElementById("messageInput");
+      const message = messageInput.value;
+      socket.send(message);
+      messageInput.value = "";
+      messageInput.focus();
+    }
+  </script>
+</body>
+</html>
